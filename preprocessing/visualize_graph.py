@@ -3,7 +3,9 @@ from torch.serialization import add_safe_globals
 from torch_geometric.data.storage import BaseStorage, NodeStorage, EdgeStorage
 import networkx as nx
 import matplotlib.pyplot as plt
+from matplotlib.patches import Patch
 import numpy as np
+import pandas as pd
 import random
 from tqdm import tqdm
 import os
@@ -12,6 +14,7 @@ import argparse
 
 # Add safe globals for serialization
 add_safe_globals([BaseStorage, NodeStorage, EdgeStorage])
+
 
 def visualize_graph(data, save_path):
 
@@ -52,7 +55,25 @@ def visualize_graph(data, save_path):
     plt.show()
 
 
-def visualize_batches(data, batch_size, save_path='output/graph/graph_batch', mode='edge'):  # 'edge' or 'node'
+def create_color_map(subgraph, investors_df, funds_df, num_investors):
+    color_map = []
+    for node in subgraph.nodes():
+        node_type = subgraph.nodes[node]['node_type']
+        if node_type == 'investor':
+            elig_count = investors_df.iloc[node]['fund_eligibility_count']
+            if elig_count == 1:
+                color_map.append('blue')
+            elif elig_count == 2:
+                color_map.append('skyblue')
+            else:
+                color_map.append('lightgreen')
+        else:
+            fund_cat = funds_df.iloc[node - num_investors]['category']
+            color_map.append('red' if fund_cat == 'ETF' else 'orange')
+    return color_map
+
+
+def visualize_batches(data, investors_df, funds_df, batch_size, save_path='output/graph/graph_batch', mode='edge'):  # 'edge' or 'node'
     edge_index = data['investor', 'invests', 'fund'].edge_index
     G = nx.Graph()
     num_investors = data['investor'].x.size(0)
@@ -73,6 +94,15 @@ def visualize_batches(data, batch_size, save_path='output/graph/graph_batch', mo
     os.makedirs(save_path, exist_ok=True)
     print(f"Graph: {G.number_of_nodes()} nodes, {G.number_of_edges()} edges")
 
+    # Add legend manually
+    legend_elements = [
+        Patch(facecolor='blue', label='Investor (1 cat)'),
+        Patch(facecolor='skyblue', label='Investor (2 cats)'),
+        Patch(facecolor='lightgreen', label='Investor (3 cats)'),
+        Patch(facecolor='red', label='Fund (ETF)'),
+        Patch(facecolor='orange', label='Fund (Other)')
+    ]
+
     if mode == 'edge':
         random.shuffle(edges)
         num_batches = len(edges) // batch_size + 1
@@ -83,16 +113,14 @@ def visualize_batches(data, batch_size, save_path='output/graph/graph_batch', mo
                 batch_nodes.add(u)
                 batch_nodes.add(v)
             sub_G = G.subgraph(batch_nodes).copy()
-
-            investor_sub = [n for n, attr in sub_G.nodes(data=True) if attr['node_type'] == 'investor']
-            fund_sub = [n for n, attr in sub_G.nodes(data=True) if attr['node_type'] == 'fund']
+            color_map = create_color_map(sub_G, investors_df, funds_df, num_investors)
 
             plt.figure(figsize=(10, 7))
             pos = nx.spring_layout(sub_G, seed=42)
-            nx.draw_networkx_nodes(sub_G, pos, nodelist=investor_sub, node_color='blue', node_size=30, label='Investors')
-            nx.draw_networkx_nodes(sub_G, pos, nodelist=fund_sub, node_color='green', node_size=30, label='Funds')
+            nx.draw_networkx_nodes(sub_G, pos, nodelist=sub_G.nodes(), node_color=color_map, node_size=30)
             nx.draw_networkx_edges(sub_G, pos, alpha=0.3)
-            plt.legend()
+
+            plt.legend(handles=legend_elements, loc='best')
             plt.title(f'Subgraph Batch {i+1}/{num_batches} (Edge-Based)')
             plt.axis('off')
             plt.tight_layout()
@@ -109,16 +137,13 @@ def visualize_batches(data, batch_size, save_path='output/graph/graph_batch', mo
 
             batch_nodes = node_ids[i * batch_size : (i + 1) * batch_size]
             sub_G = G.subgraph(batch_nodes).copy()
-
-            investor_sub = [n for n, attr in sub_G.nodes(data=True) if attr['node_type'] == 'investor']
-            fund_sub = [n for n, attr in sub_G.nodes(data=True) if attr['node_type'] == 'fund']
+            color_map = create_color_map(sub_G, investors_df, funds_df, num_investors)
 
             plt.figure(figsize=(10, 7))
             pos = nx.spring_layout(sub_G, seed=42)
-            nx.draw_networkx_nodes(sub_G, pos, nodelist=investor_sub, node_color='blue', node_size=30, label='Investors')
-            nx.draw_networkx_nodes(sub_G, pos, nodelist=fund_sub, node_color='green', node_size=30, label='Funds')
+            nx.draw_networkx_nodes(sub_G, pos, nodelist=sub_G.nodes(), node_color=color_map, node_size=30)
             nx.draw_networkx_edges(sub_G, pos, alpha=0.3)
-            plt.legend()
+            plt.legend(handles=legend_elements, loc='best')
             plt.title(f'Subgraph Batch {i+1}/{num_batches} (Node-Based)')
             plt.axis('off')
             plt.tight_layout()
@@ -179,11 +204,13 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     data = torch.load(args.data_path)
+    investors_df = pd.read_csv('../data/investors.csv')
+    funds_df = pd.read_csv('../data/funds.csv')
 
     if args.all_data:
         visualize_graph(data, save_path=args.save_path)
     else:
-        visualize_batches(data, batch_size=args.batch_size, save_path=args.save_path, mode=args.mode)
+        visualize_batches(data, investors_df, funds_df, batch_size=args.batch_size, save_path=args.save_path, mode=args.mode)
 
     if not args.no_show:
         graph_diagnostics(data, save_path=args.save_path)
