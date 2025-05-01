@@ -31,7 +31,6 @@ This project simulates realistic financial advisor and fund data to train and ev
 ### Files Generated
 - `data/investors.csv` – 3000 advisors with detailed profiles
 - `data/funds.csv` – 500 financial products
-- `data/investor_product_edges.csv` – ~25,000 historical investor-fund links
-- `data/plots/` – Visualizations of feature distributions
+- `data/investor_product_edges.csv` – ~12,000 historical investor-fund links
 
 ---
