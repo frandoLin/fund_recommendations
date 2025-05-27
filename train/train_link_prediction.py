@@ -63,6 +63,12 @@ val_labels = all_labels[n_train:n_train + n_val]
 test_edge_index = all_edge_index[:, n_train + n_val:]
 test_labels = all_labels[n_train + n_val:]
 
+torch.save({
+    'test_edge_index': test_edge_index.cpu(),
+    'test_labels': test_labels.cpu()
+}, '../output/graph/test_edge_indices.pt')
+print("Test edges saved to ../output/graph/test_edge_indices.pt for top-k evaluation.")
+
 # Initialize model
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 model = GNNLinkPredictor(hidden_channels=64, metadata=metadata).to(device)
